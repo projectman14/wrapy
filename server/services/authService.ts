@@ -32,3 +32,19 @@ export const login = async (email: string, password: string) => {
     return { user, token };
 
 }
+
+export const verifyEmail = async (user_id: number) => {
+
+    const user = await prisma.user.findUnique({where : {id : user_id}});
+
+    if (!user) throw new Error('User not found');
+
+    const updateUser = await prisma.user.update({
+        where: { id: user_id },
+        data: { mail_verified: true }
+    });
+
+    const userUpdated = await prisma.user.findUnique({where : {id : user_id}});
+ 
+    return userUpdated;
+}
