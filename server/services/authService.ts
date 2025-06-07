@@ -1,13 +1,14 @@
 import { prisma } from '../config/prisma';
 import { hashPassword, comparePassword } from '../utils/hash';
 import { generateToken } from '../utils/jwt';
+import { sendVerificationEmail } from '../utils/sendmail';
 
-export const register = async (emal: string, name: string, username: string, password: string) => {
+export const register = async (email: string, name: string, username: string, password: string) => {
     const hash = await hashPassword(password);
 
     const user = await prisma.user.create({
         data: {
-            email: emal,
+            email: email,
             name: name,
             username: username,
             password: hash
@@ -15,6 +16,8 @@ export const register = async (emal: string, name: string, username: string, pas
     });
 
     const token = generateToken({ id: user.id });
+
+    await sendVerificationEmail(email, token);
 
     return { user, token };
 }
@@ -35,7 +38,7 @@ export const login = async (email: string, password: string) => {
 
 export const verifyEmail = async (user_id: number) => {
 
-    const user = await prisma.user.findUnique({where : {id : user_id}});
+    const user = await prisma.user.findUnique({ where: { id: user_id } });
 
     if (!user) throw new Error('User not found');
 
@@ -44,7 +47,7 @@ export const verifyEmail = async (user_id: number) => {
         data: { mail_verified: true }
     });
 
-    const userUpdated = await prisma.user.findUnique({where : {id : user_id}});
- 
+    const userUpdated = await prisma.user.findUnique({ where: { id: user_id } });
+
     return userUpdated;
 }
