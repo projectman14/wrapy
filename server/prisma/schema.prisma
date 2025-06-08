@@ -21,6 +21,7 @@ model User {
 
   tweets    Tweet[]
   likes     Like[]
+  bookmarks Bookmark[]
   followers Follower[] @relation("UserFollowers")
   following Follower[] @relation("UserFollowing")
 }
@@ -46,6 +47,7 @@ model Tweet {
   replies    Tweet[]  @relation("Replies")
   thread     Tweet[]  @relation("ThreadRoot")
   quotes     Tweet[]  @relation("Quotes")
+  bookmarks Bookmark[]
 
   likes Like[]
 }
@@ -70,4 +72,15 @@ model Follower {
   createdAt   DateTime @default(now())
 
   @@unique([followerId, followingId])
+}
+
+model Bookmark {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  tweet     Tweet    @relation(fields: [tweetId], references: [id])
+  userId    Int
+  tweetId   Int
+  createdAt DateTime @default(now())
+
+  @@unique([userId, tweetId])
 }

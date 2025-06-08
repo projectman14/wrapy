@@ -17,7 +17,33 @@ export const createPost = async (user: any, content: string, mediaUrl: string, p
     return tweet;
 }
 
-export const getFeed = async (user: any) => {
+export const createTweetWithMediaService = async (
+    userId: number,
+    content: string,
+    mediaUrl: string | null,
+    parentId: number,
+    threadRootId: number,
+    quoteOfId: number
+) => {
+
+    if (!content || content.length > 280) throw new Error('Tweet content is required and max 280 characters');
+
+    const tweet = await prisma.tweet.create({
+        data: {
+            content,
+            mediaUrl,
+            userId,
+            parentId,
+            threadRootId,
+            quoteOfId
+        },
+    });
+
+    return tweet;
+};
+
+
+export const getFeed = async (user: any, limit = 20, cursor?: number) => {
     const following = await prisma.follower.findMany({
         where: { followerId: user.id },
         select: { followingId: true },
@@ -28,21 +54,104 @@ export const getFeed = async (user: any) => {
     const tweets = await prisma.tweet.findMany({
         where: {
             userId: { in: ids },
+            threadRootId: null
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: {
+            createdAt: "desc",
+        },
+        take: limit + 1,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
         include: {
             user: {
                 select: {
                     id: true,
                     username: true,
+                    name: true,
                     avatarUrl: true,
+                },
+            },
+            likes: {
+                select: { userId: true },
+            },
+            threadRoot: {
+                select: {
+                    id: true,
+                    content: true,
+                    user: {
+                        select: { id: true, username: true },
+                    },
+                },
+            },
+            quoteOf: {
+                select: {
+                    id: true,
+                    content: true,
+                    user: {
+                        select: { id: true, username: true },
+                    },
                 },
             },
         },
     });
 
-    return tweets;
-}
+    const hasNext = tweets.length > limit;
+    const result = hasNext ? tweets.slice(0, limit) : tweets;
+    const nextCursor = hasNext ? tweets[limit].id : null;
+
+    return {
+        tweets: result,
+        nextCursor,
+    };
+};
+
+export const getExploreFeed = async (limit = 20, cursor?: number) => {
+    const tweets = await prisma.tweet.findMany({
+        orderBy: {
+            createdAt: 'desc',
+        },
+        take: limit + 1,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    username: true,
+                    name: true,
+                    avatarUrl: true,
+                },
+            },
+            likes: {
+                select: { userId: true },
+            },
+            threadRoot: {
+                select: {
+                    id: true,
+                    content: true,
+                    user: { select: { id: true, username: true } },
+                },
+            },
+            quoteOf: {
+                select: {
+                    id: true,
+                    content: true,
+                    user: { select: { id: true, username: true } },
+                },
+            },
+        },
+    });
+
+    const hasNext = tweets.length > limit;
+    const result = hasNext ? tweets.slice(0, limit) : tweets;
+    const nextCursor = hasNext ? tweets[limit].id : null;
+
+    return {
+        tweets: result,
+        nextCursor,
+    };
+};
+
 
 export const likeTweet = async (user: any, tweetId: number) => {
 
@@ -160,5 +269,59 @@ export const getQuoteTweets = async (tweetId: number) => {
     });
 
     return quotes;
+};
+
+export const addBookmark = async (userId: number, tweetId: number) => {
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) throw new Error('Invalid User Id');
+
+    const tweet = await prisma.tweet.findUnique({ where: { id: tweetId } });
+
+    if (!tweet) throw new Error('Invalid tweet Id');
+
+    return await prisma.bookmark.create({
+        data: { userId, tweetId },
+    });
+};
+
+export const removeBookmark = async (userId: number, tweetId: number) => {
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) throw new Error('Invalid User Id');
+
+    const tweet = await prisma.tweet.findUnique({ where: { id: tweetId } });
+
+    if (!tweet) throw new Error('Invalid tweet Id');
+
+    return await prisma.bookmark.delete({
+        where: {
+            userId_tweetId: { userId, tweetId },
+        },
+    });
+};
+
+export const getBookmarks = async (userId: number) => {
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) throw new Error('Invalid User Id');
+
+    return await prisma.bookmark.findMany({
+        where: { userId },
+        include: {
+            tweet: {
+                include: {
+                    user: {
+                        select: { id: true, username: true, name: true, avatarUrl: true },
+                    },
+                    likes: true,
+                },
+            },
+        },
+        orderBy: { createdAt: "desc" },
+    });
 };
 
