@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { extractMentions } from '../utils/extractMention';
 
 export const createPost = async (user: any, content: string, mediaUrl: string, parentId: number, threadRootId: number, quoteOfId: number) => {
     if (!content || content.length > 280) throw new Error('Tweet content is required and max 280 characters');
@@ -13,6 +14,26 @@ export const createPost = async (user: any, content: string, mediaUrl: string, p
             quoteOfId
         },
     });
+
+    const mentionedUsernames = extractMentions(content);
+
+    if (mentionedUsernames.length) {
+        const mentionedUsers = await prisma.user.findMany({
+            where: {
+                username: { in: mentionedUsernames },
+            },
+            select: { id: true },
+        });
+
+        await prisma.mention.createMany({
+            data: mentionedUsers.map((u) => ({
+                tweetId: tweet.id,
+                userId: u.id,
+            })),
+            skipDuplicates: true,
+        });
+    }
+
 
     return tweet;
 }
@@ -38,6 +59,25 @@ export const createTweetWithMediaService = async (
             quoteOfId
         },
     });
+
+    const mentionedUsernames = extractMentions(content);
+
+    if (mentionedUsernames.length) {
+        const mentionedUsers = await prisma.user.findMany({
+            where: {
+                username: { in: mentionedUsernames },
+            },
+            select: { id: true },
+        });
+
+        await prisma.mention.createMany({
+            data: mentionedUsers.map((u) => ({
+                tweetId: tweet.id,
+                userId: u.id,
+            })),
+            skipDuplicates: true,
+        });
+    }
 
     return tweet;
 };
@@ -92,6 +132,9 @@ export const getFeed = async (user: any, limit = 20, cursor?: number) => {
                     },
                 },
             },
+            replies: {
+                
+            }
         },
     });
 
