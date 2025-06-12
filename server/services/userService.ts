@@ -1,6 +1,15 @@
 import { prisma } from '../config/prisma'
+import redis from '../utils/redis';
 
 export const getUserProfileStats = async (username: string) => {
+
+    const cacheKey = `user:profileStats:${username}`;
+
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+        return JSON.parse(cached);
+    }
+
     const user = await prisma.user.findUnique({
         where: { username },
         select: {
@@ -21,6 +30,8 @@ export const getUserProfileStats = async (username: string) => {
     });
 
     if (!user) throw new Error('User not found');
+
+    await redis.set(cacheKey, JSON.stringify(user), { EX: 3600 });
 
     return user;
 };
@@ -43,6 +54,8 @@ export const updateProfile = async (
             avatarUrl: true,
         },
     });
+
+    await redis.del(`user:profileStats:${updatedUser.username}`);
 
     return updatedUser;
 };

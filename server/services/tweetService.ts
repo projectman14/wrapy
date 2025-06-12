@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma';
 import { extractMentions } from '../utils/extractMention';
+import redis from '../utils/redis';
 
 export const createPost = async (user: any, content: string, mediaUrl: string, parentId: number, threadRootId: number, quoteOfId: number) => {
     if (!content || content.length > 280) throw new Error('Tweet content is required and max 280 characters');
@@ -84,6 +85,14 @@ export const createTweetWithMediaService = async (
 
 
 export const getFeed = async (user: any, limit = 20, cursor?: number) => {
+
+    const cacheKey = `user:feed:${user.id}:${cursor || 'start'}`;
+
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+        return JSON.parse(cached);
+    }
+
     const following = await prisma.follower.findMany({
         where: { followerId: user.id },
         select: { followingId: true },
@@ -133,7 +142,7 @@ export const getFeed = async (user: any, limit = 20, cursor?: number) => {
                 },
             },
             replies: {
-                
+
             }
         },
     });
@@ -142,6 +151,10 @@ export const getFeed = async (user: any, limit = 20, cursor?: number) => {
     const result = hasNext ? tweets.slice(0, limit) : tweets;
     const nextCursor = hasNext ? tweets[limit].id : null;
 
+    await redis.set(cacheKey, JSON.stringify({ tweets: result, nextCursor }), {
+        EX: 60,
+    });
+
     return {
         tweets: result,
         nextCursor,
@@ -149,6 +162,14 @@ export const getFeed = async (user: any, limit = 20, cursor?: number) => {
 };
 
 export const getExploreFeed = async (limit = 20, cursor?: number) => {
+
+    const cacheKey = `explore:feed:${limit}:${cursor ?? 'start'}`;
+
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+        return JSON.parse(cached);
+    }
+
     const tweets = await prisma.tweet.findMany({
         orderBy: {
             createdAt: 'desc',
@@ -188,11 +209,17 @@ export const getExploreFeed = async (limit = 20, cursor?: number) => {
     const hasNext = tweets.length > limit;
     const result = hasNext ? tweets.slice(0, limit) : tweets;
     const nextCursor = hasNext ? tweets[limit].id : null;
-
-    return {
+    const response = {
         tweets: result,
         nextCursor,
     };
+
+
+    await redis.set(cacheKey, JSON.stringify(response), {
+        EX: 60,
+    });
+
+    return response;
 };
 
 
